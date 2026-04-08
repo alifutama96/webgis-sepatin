@@ -3,92 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGIS PLUP Sepatin - Land Cover Viewer</title>
+    <title>WebGIS PLUP Sepatin - Land Cover</title>
     
-    <!-- Tailwind CSS untuk UI Modern -->
+    <!-- Framework & Library -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- Google Fonts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Proj4 untuk menangani koordinat UTM 50S (EPSG:32750) dari file GeoJSON -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        #map { height: calc(100vh - 64px); width: 100%; z-index: 1; }
-        .color-box { width: 16px; height: 16px; margin-right: 12px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
-        .legend-item { display: flex; align-items: center; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; color: #475569; transition: all 0.2s; }
-        .legend-item:hover { background: #f1f5f9; }
+        #map { height: calc(100vh - 64px); width: 100%; z-index: 1; background: #f1f5f9; }
+        .legend-swatch { width: 16px; height: 16px; border-radius: 4px; margin-right: 10px; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+        .custom-popup .leaflet-popup-content-wrapper { border-radius: 12px; padding: 5px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         
-        /* Loading animation */
-        .typing-loader { display: inline-flex; gap: 2px; }
-        .typing-loader div { width: 4px; height: 4px; background: #3b82f6; border-radius: 50%; animation: bounce 0.6s infinite alternate; }
-        .typing-loader div:nth-child(2) { animation-delay: 0.2s; }
-        .typing-loader div:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes bounce { to { transform: translateY(-4px); opacity: 0.3; } }
+        /* Animasi Loading */
+        .loader-dots div { width: 5px; height: 5px; background: #3b82f6; border-radius: 50%; animation: bounce 0.5s infinite alternate; }
+        @keyframes bounce { to { transform: translateY(-5px); opacity: 0.3; } }
     </style>
 </head>
 <body class="bg-slate-50 overflow-hidden">
 
-    <!-- Navbar -->
+    <!-- Header Navigation -->
     <nav class="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shadow-sm relative z-50">
         <div class="flex items-center space-x-3">
-            <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
+            <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-100">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                 </svg>
             </div>
             <div>
-                <h1 class="font-bold text-slate-800 leading-none text-lg">WebGIS PLUP Sepatin</h1>
-                <p class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mt-1">Sistem Informasi Tutupan Lahan</p>
+                <h1 class="font-bold text-slate-800 text-lg leading-tight">WebGIS Sepatin</h1>
+                <p class="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Sistem Informasi Spasial Desa</p>
             </div>
         </div>
         
-        <div class="flex items-center space-x-2">
-            <button id="ai-analyze-btn" class="flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white text-sm font-medium rounded-lg transition shadow-md disabled:opacity-50">
+        <div class="flex items-center space-x-4">
+            <div id="loading-indicator" class="hidden flex items-center space-x-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold border border-blue-100">
+                <div class="loader-dots flex space-x-1"><div></div><div></div><div></div></div>
+                <span>Sinkronisasi Data...</span>
+            </div>
+            <button id="ai-analyze" class="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-md flex items-center">
                 <span class="mr-2">✨ Analisis AI</span>
             </button>
-            <div id="loading-status" class="hidden text-xs text-blue-600 font-medium px-3 animate-pulse">Memuat Data Spasial...</div>
         </div>
     </nav>
 
     <div class="flex relative">
         <!-- Sidebar -->
-        <aside id="sidebar" class="absolute left-0 top-0 h-[calc(100vh-64px)] w-80 bg-white border-r border-slate-200 z-[40] transition-transform duration-300 transform translate-x-0 overflow-y-auto p-6 shadow-2xl md:shadow-none">
+        <aside class="w-80 bg-white border-r border-slate-200 h-[calc(100vh-64px)] overflow-y-auto p-6 z-[40] shadow-sm">
             
-            <div id="ai-panel" class="mb-8 hidden">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-[11px] font-bold text-purple-600 uppercase tracking-[0.1em]">✨ Rekomendasi AI</h3>
-                    <button onclick="closeAIPanel()" class="text-slate-400 hover:text-slate-600">&times;</button>
-                </div>
-                <div id="ai-content" class="bg-purple-50 p-4 rounded-2xl border border-purple-100 text-xs text-slate-700 leading-relaxed italic">
-                    Memproses data wilayah...
-                </div>
-            </div>
-
+            <!-- Statistik Wilayah -->
             <div class="mb-8">
-                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-4">Statistik Wilayah</h3>
+                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Statistik Lahan</h3>
                 <div class="space-y-3">
-                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-2xl border border-blue-100">
-                        <span class="text-xs text-blue-600 font-semibold">Total Luas Area</span>
-                        <p id="total-area" class="text-2xl font-bold text-slate-800">0 <span class="text-sm font-normal text-slate-500">Ha</span></p>
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">Total Luas</span>
+                        <p id="stat-total-area" class="text-2xl font-bold text-slate-800 mt-1">0 <span class="text-sm font-normal text-slate-400">Ha</span></p>
                     </div>
-                    <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                        <span class="text-xs text-emerald-600 font-semibold">Desa Fokus</span>
-                        <p id="focus-area" class="text-lg font-bold text-emerald-800">-</p>
+                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                        <span class="text-[10px] font-bold text-blue-600 uppercase">Desa Fokus</span>
+                        <p id="stat-village" class="text-lg font-bold text-blue-900 mt-1">-</p>
                     </div>
                 </div>
             </div>
 
+            <!-- Legenda -->
             <div class="mb-8">
-                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em] mb-4">Legenda</h3>
-                <div id="legend-list" class="space-y-1"></div>
+                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Legenda Tutupan Lahan</h3>
+                <div id="legend-container" class="space-y-1.5">
+                    <!-- Legenda diisi otomatis oleh JS -->
+                </div>
             </div>
 
-            <div class="mt-auto pt-6 border-t border-slate-100 text-[10px] text-slate-400">
-                Data: <span class="font-mono">PLUP_sepatin.geojson</span><br>
-                Analisis: Gemini 2.5 Flash AI
+            <!-- Hasil Analisis AI -->
+            <div id="ai-response-box" class="hidden animate-in fade-in slide-in-from-bottom-2 duration-500 mt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-[11px] font-bold text-indigo-600 uppercase tracking-widest">Rekomendasi AI</h3>
+                    <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-slate-300 hover:text-slate-500">&times;</button>
+                </div>
+                <div id="ai-text" class="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl text-[12px] text-indigo-900 leading-relaxed italic">
+                    Memproses data...
+                </div>
             </div>
         </aside>
 
@@ -96,35 +94,14 @@
         <main class="flex-1 relative">
             <div id="map"></div>
             
-            <!-- Chat Assistant -->
-            <div id="ai-chat" class="absolute top-6 right-6 z-[1000] w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden hidden transition-all">
-                <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 text-white flex justify-between items-center">
-                    <span class="text-xs font-bold">✨ GIS Assistant</span>
-                    <button onclick="toggleChat()" class="text-white/80 hover:text-white">&times;</button>
-                </div>
-                <div id="chat-messages" class="h-64 overflow-y-auto p-4 text-xs space-y-3 bg-slate-50 flex flex-col">
-                    <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-sm self-start">Halo! Saya asisten cerdas WebGIS Sepatin. Ada yang bisa saya bantu terkait data tutupan lahan?</div>
-                </div>
-                <div class="p-2 border-t border-slate-200 flex">
-                    <input id="chat-input" type="text" placeholder="Tanya sesuatu..." class="flex-1 text-xs p-2 outline-none">
-                    <button onclick="sendChatMessage()" class="bg-blue-600 text-white p-2 rounded-lg ml-2">
-                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
-                    </button>
-                </div>
-            </div>
-
+            <!-- Floating Controls -->
             <div class="absolute bottom-6 right-6 z-[1000] flex flex-col space-y-3">
-                <button onclick="toggleChat()" class="bg-indigo-600 p-3 rounded-2xl shadow-xl shadow-indigo-200 hover:bg-indigo-700 text-white transition-all" title="Bantuan AI">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                <button onclick="toggleBasemap()" class="p-3 bg-white/90 backdrop-blur rounded-2xl shadow-xl hover:bg-white transition-all border border-white group" title="Ganti Tampilan Satelit">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600 group-hover:text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </button>
-                <button onclick="toggleBasemap()" class="bg-white/90 backdrop-blur p-3 rounded-2xl shadow-xl hover:bg-white text-slate-700 transition-all border border-white" title="Basemap">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                </button>
-                <button onclick="zoomToCenter()" class="bg-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 text-white transition-all" title="Reset">
+                <button onclick="resetView()" class="p-3 bg-blue-600 rounded-2xl shadow-xl hover:bg-blue-700 transition-all text-white" title="Pusatkan Peta">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     </svg>
@@ -133,147 +110,179 @@
         </main>
     </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <script>
-        const apiKey = ""; // API Key Gemini otomatis terisi di sistem
-        let currentGeoJSON = null;
-        let geoLayer = null;
+        // Konfigurasi Peta & API
+        const apiKey = ""; // API Key Gemini
+        let map, geojsonLayer, currentData;
+        let isSatellite = false;
 
-        // 1. Inisialisasi Peta
-        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([0,0], 2);
-        const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        // Definisikan Proyeksi UTM Zone 50S (EPSG:32750) sesuai file kamu
+        proj4.defs("EPSG:32750", "+proj=utm +zone=50 +south +datum=WGS84 +units=m +no_defs");
 
-        // 2. Skema Warna Berdasarkan Kolom PL_24 kamu
-        const colorPalette = {
-            'Pemukiman': '#FF0000',
-            'Tambak': '#FFD700',
-            'Mangrove': '#006400',
-            'Hutan Mangrove Primer': '#004d00',
-            'Hutan Mangrove Sekunder': '#228B22',
-            'Tubuh Air': '#00FFFF',
-            'Perikanan': '#0000FF',
-            'Rehabilitasi': '#ADD8E6'
+        // Skema Warna Berdasarkan Kolom PL_24 kamu
+        const colorMap = {
+            'Pemukiman': '#ef4444',
+            'Tambak': '#f59e0b',
+            'Mangrove': '#059669',
+            'Hutan Mangrove Primer': '#064e3b',
+            'Hutan Mangrove Sekunder': '#10b981',
+            'Tubuh Air': '#06b6d4',
+            'Perikanan': '#3b82f6',
+            'Rehabilitasi': '#a7f3d0'
         };
 
-        // Render Legenda ke UI
-        const legendList = document.getElementById('legend-list');
-        Object.entries(colorPalette).forEach(([name, color]) => {
-            const div = document.createElement('div');
-            div.className = 'legend-item';
-            div.innerHTML = `<div class="color-box" style="background-color: ${color}"></div><span>${name}</span>`;
-            legendList.appendChild(div);
-        });
+        // 1. Inisialisasi Peta
+        function initMap() {
+            map = L.map('map', { 
+                zoomControl: false, 
+                attributionControl: false 
+            }).setView([-0.635, 117.47], 13); // Default sekitar Desa Sepatin
 
-        // 3. Fungsi Load Data GeoJSON Otomatis
-        async function loadGeoJSON() {
-            const status = document.getElementById('loading-status');
-            status.classList.remove('hidden');
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+            
+            renderLegend();
+            loadData();
+        }
+
+        // 2. Render Legenda di Sidebar
+        function renderLegend() {
+            const container = document.getElementById('legend-container');
+            Object.entries(colorMap).forEach(([label, color]) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center text-xs text-slate-600 py-1 transition-all hover:bg-slate-50 px-2 rounded-lg';
+                item.innerHTML = `<div class="legend-swatch" style="background:${color}"></div><span>${label}</span>`;
+                container.appendChild(item);
+            });
+        }
+
+        // 3. Konversi Koordinat UTM -> WGS84
+        function projectGeoJSON(json) {
+            json.features.forEach(feat => {
+                const type = feat.geometry.type;
+                if (type === "MultiPolygon") {
+                    feat.geometry.coordinates = feat.geometry.coordinates.map(poly => 
+                        poly.map(ring => ring.map(c => proj4("EPSG:32750", "WGS84", [c[0], c[1]])))
+                    );
+                } else if (type === "Polygon") {
+                    feat.geometry.coordinates = feat.geometry.coordinates.map(ring => 
+                        ring.map(c => proj4("EPSG:32750", "WGS84", [c[0], c[1]]))
+                    );
+                }
+            });
+            return json;
+        }
+
+        // 4. Memuat File GeoJSON Secara Otomatis
+        async function loadData() {
+            const loader = document.getElementById('loading-indicator');
+            loader.classList.remove('hidden');
 
             try {
-                // MEMANGGIL FILE KAMU: PLUP_sepatin.geojson
+                // Memanggil file PLUP_sepatin.geojson
                 const response = await fetch('PLUP_sepatin.geojson');
-                if (!response.ok) throw new Error("File GeoJSON tidak ditemukan.");
+                if (!response.ok) throw new Error();
                 
-                const data = await response.json();
-                currentGeoJSON = data;
+                let data = await response.json();
 
-                geoLayer = L.geoJSON(data, {
-                    style: (feature) => {
-                        const val = feature.properties.PL_24 || feature.properties.Polaruang || "";
-                        let matchedColor = '#94a3b8';
-                        for (let key in colorPalette) {
-                            if (val.includes(key)) { matchedColor = colorPalette[key]; break; }
-                        }
-                        return { fillColor: matchedColor, weight: 1, opacity: 1, color: 'white', fillOpacity: 0.7 };
-                    },
+                // Cek jika butuh proyeksi (koordinat besar > 1000 berarti UTM)
+                const checkCoord = data.features[0].geometry.coordinates[0][0][0];
+                if (Math.abs(checkCoord[0]) > 1000) {
+                    console.log("Koordinat UTM terdeteksi. Mengonversi ke WGS84...");
+                    data = projectGeoJSON(data);
+                }
+
+                currentData = data;
+                
+                geojsonLayer = L.geoJSON(data, {
+                    style: (f) => ({
+                        fillColor: colorMap[f.properties.PL_24] || '#94a3b8',
+                        weight: 0.5,
+                        opacity: 1,
+                        color: 'white',
+                        fillOpacity: 0.7
+                    }),
                     onEachFeature: (f, l) => {
-                        let pop = `<div class='text-xs font-sans'><b>PL:</b> ${f.properties.PL_24}<br><b>Luas:</b> ${f.properties.Luas_ha?.toFixed(2)} Ha</div>`;
-                        l.bindPopup(pop);
+                        const p = f.properties;
+                        l.bindPopup(`
+                            <div class="custom-popup">
+                                <h4 class="font-bold text-slate-800 border-b pb-1 mb-2">${p.PL_24 || 'Tanpa Nama'}</h4>
+                                <div class="text-[11px] space-y-1">
+                                    <p class="text-slate-500 uppercase font-bold tracking-tighter">Luas Wilayah</p>
+                                    <p class="text-slate-800 text-sm font-bold">${p.Luas_ha?.toFixed(3)} Ha</p>
+                                    <p class="text-slate-500 uppercase font-bold tracking-tighter mt-2">Keterangan</p>
+                                    <p class="text-slate-800">${p.Desa || '-'}</p>
+                                </div>
+                            </div>
+                        `);
                     }
                 }).addTo(map);
 
-                // Zoom otomatis ke data
-                map.fitBounds(geoLayer.getBounds());
-
-                // Update Statistik Sidebar
-                const totalHa = data.features.reduce((sum, f) => sum + (f.properties.Luas_ha || 0), 0);
-                document.getElementById('total-area').innerHTML = `${totalHa.toLocaleString('id-ID', {maximumFractionDigits: 2})} <span class="text-sm font-normal text-slate-500">Ha</span>`;
-                document.getElementById('focus-area').innerText = data.features[0]?.properties.Desa || "Sepatin";
+                // Sinkronisasi Statistik UI
+                map.fitBounds(geojsonLayer.getBounds());
+                updateUIStats(data);
 
             } catch (err) {
                 console.error(err);
-                status.innerText = "Error: Pastikan file PLUP_sepatin.geojson ada di folder yang sama.";
+                alert("File 'PLUP_sepatin.geojson' tidak terbaca. Pastikan file ada di folder yang sama.");
             } finally {
-                setTimeout(() => status.classList.add('hidden'), 2000);
+                loader.classList.add('hidden');
             }
         }
 
-        // 4. Integrasi Gemini AI
-        async function askGemini(prompt, systemMsg = "") {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        systemInstruction: systemMsg ? { parts: [{ text: systemMsg }] } : undefined
-                    })
-                });
-                const resData = await response.json();
-                return resData.candidates?.[0]?.content?.parts?.[0]?.text || "AI tidak merespon.";
-            } catch (e) { return "Koneksi terputus."; }
+        function updateUIStats(data) {
+            const total = data.features.reduce((sum, f) => sum + (f.properties.Luas_ha || 0), 0);
+            document.getElementById('stat-total-area').innerHTML = `${total.toLocaleString('id-ID', {maximumFractionDigits: 2})} <span class="text-sm font-normal text-slate-400">Ha</span>`;
+            document.getElementById('stat-village').innerText = data.features[0]?.properties.Desa || "Sepatin";
         }
 
-        document.getElementById('ai-analyze-btn').addEventListener('click', async () => {
-            if (!currentGeoJSON) return;
-            const panel = document.getElementById('ai-panel');
-            const content = document.getElementById('ai-content');
-            panel.classList.remove('hidden');
-            content.innerHTML = '<div class="typing-loader"><div></div><div></div><div></div></div> Menganalisis...';
+        // 5. Analisis AI dengan Gemini
+        document.getElementById('ai-analyze').addEventListener('click', async () => {
+            if (!currentData) return;
+            
+            const box = document.getElementById('ai-response-box');
+            const txt = document.getElementById('ai-text');
+            box.classList.remove('hidden');
+            txt.innerHTML = 'Menganalisis keseimbangan ekosistem...';
 
-            const dataSample = currentGeoJSON.features.slice(0, 20).map(f => ({
-                label: f.properties.PL_24,
-                luas: f.properties.Luas_ha
+            const summary = currentData.features.slice(0, 10).map(f => ({
+                t: f.properties.PL_24,
+                l: f.properties.Luas_ha
             }));
 
-            const prompt = `Analisis data tutupan lahan wilayah Sepatin berikut: ${JSON.stringify(dataSample)}. Berikan ringkasan strategis mengenai keseimbangan ekosistem pesisir dalam 3 paragraf pendek (Bahasa Indonesia).`;
-            content.innerText = await askGemini(prompt, "Kamu adalah pakar tata ruang geospasial.");
+            const prompt = `Analisis data tata ruang Desa Sepatin ini: ${JSON.stringify(summary)}. 
+            Berikan 3 poin penting dalam bahasa Indonesia:
+            1. Kondisi dominan wilayah.
+            2. Potensi ekonomi (tambak/mangrove).
+            3. Saran perlindungan lingkungan.`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const res = await response.json();
+                txt.innerText = res.candidates[0].content.parts[0].text;
+            } catch (e) {
+                txt.innerText = "Gagal menghubungi asisten AI.";
+            }
         });
 
-        async function sendChatMessage() {
-            const input = document.getElementById('chat-input');
-            const container = document.getElementById('chat-messages');
-            if (!input.value.trim()) return;
-
-            container.innerHTML += `<div class="bg-blue-100 p-2 rounded-lg self-end text-xs max-w-[85%] border border-blue-200 shadow-sm"><b>Anda:</b> ${input.value}</div>`;
-            const userTxt = input.value;
-            input.value = "";
-            container.scrollTop = container.scrollHeight;
-
-            const tempId = "ai-" + Date.now();
-            container.innerHTML += `<div id="${tempId}" class="bg-white p-2 rounded-lg self-start text-xs border border-slate-200 shadow-sm"><div class="typing-loader"><div></div><div></div><div></div></div></div>`;
-            
-            const aiRes = await askGemini(userTxt, "Kamu adalah asisten ahli WebGIS Sepatin. Bantu user memahami hubungan antara Mangrove, Tambak, dan Pemukiman.");
-            document.getElementById(tempId).innerHTML = `<b>AI:</b> ${aiRes}`;
-            container.scrollTop = container.scrollHeight;
-        }
-
-        // 5. Kontrol UI Tambahan
+        // 6. Basemap Toggle
         function toggleBasemap() {
-            if (map.hasLayer(cartoLight)) { map.removeLayer(cartoLight); satellite.addTo(map); }
-            else { map.removeLayer(satellite); cartoLight.addTo(map); }
+            if (!isSatellite) {
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+            } else {
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+            }
+            isSatellite = !isSatellite;
         }
-        function zoomToCenter() { if(geoLayer) map.fitBounds(geoLayer.getBounds()); }
-        function toggleChat() { document.getElementById('ai-chat').classList.toggle('hidden'); }
-        function closeAIPanel() { document.getElementById('ai-panel').classList.add('hidden'); }
-        document.getElementById('chat-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChatMessage(); });
 
-        // Load otomatis saat halaman dibuka
-        window.onload = loadGeoJSON;
+        function resetView() {
+            if (geojsonLayer) map.fitBounds(geojsonLayer.getBounds());
+        }
+
+        window.onload = initMap;
     </script>
 </body>
 </html>
